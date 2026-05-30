@@ -99,66 +99,7 @@ ChatOpenAI.prototype.invoke = async function (messages, options) {
     }
 };
 
-// Ferramenta de busca na Web (Google Custom Search ou Busca DuckDuckGo Gratuita)
-const searchWeb = tool(async ({ query }) => {
-    console.log(`[Busca] Executando busca na Web para: "${query}"`);
-    const googleApiKey = process.env.GOOGLE_API_KEY;
-    const googleCx = process.env.GOOGLE_CX;
-
-    if (googleApiKey && googleCx && googleApiKey !== "your-google-api-key-here") {
-        try {
-            const url = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleCx}&q=${encodeURIComponent(query)}`;
-            const response = await fetch(url);
-            const data = await response.json();
-            const results = data.items || [];
-            if (results.length > 0) {
-                return results.map(r => `Título: ${r.title}\nURL: ${r.link}\nConteúdo: ${r.snippet}\n---`).join("\n");
-            }
-        } catch (error) {
-            console.error("[Busca] Erro na busca Google:", error.message);
-        }
-    }
-
-    // Fallback para busca gratuita via DuckDuckGo (Sem API Key)
-    try {
-        console.log(`[Busca] Utilizando busca gratuita do DuckDuckGo para: "${query}"`);
-        const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-        const response = await fetch(url, {
-            headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-        });
-        if (response.ok) {
-            const html = await response.text();
-            const matches = [...html.matchAll(/<a class="result__snippet" href="[^"]*?uddg=([^&"]+)[^"]*?">([\s\S]*?)<\/a>/g)];
-            if (matches.length > 0) {
-                return matches.slice(0, 5).map((match, i) => {
-                    const cleanUrl = decodeURIComponent(match[1]);
-                    const cleanSnippet = match[2].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
-                    return `Resultado ${i + 1}:\nURL: ${cleanUrl}\nConteúdo: ${cleanSnippet}\n---`;
-                }).join("\n");
-            }
-        }
-    } catch (error) {
-        console.error("[Busca] Erro na busca DuckDuckGo:", error.message);
-    }
-
-    // Último recurso: Fallback Mock funcional para testes offline
-    console.log("[Busca] Utilizando busca mock offline");
-    return `
-Título: Fato ou Fake: Checagem sobre "${query}"
-URL: https://g1.globo.com/fato-ou-fake/exemplo-checagem
-Conteúdo: Checagem realizada mostra que alegações recentes sobre "${query}" são enganosas. Órgãos oficiais desmentiram o boato.
-Data: 2026-05-20
----
-`;
-}, {
-    name: "web_search",
-    description: "Pesquisa na web para checagem de fatos e verificação de notícias. Obrigatório executar para validar alegações.",
-    schema: z.object({
-        query: z.string().describe("A frase ou termos de busca para pesquisar fatos no Google/Tavily.")
-    })
-});
+const MAX_SEARCHES = parseInt(process.env.MAX_SEARCHES) || 7;
 
 // Ferramenta de leitura de link/URL para extrair o conteúdo de texto da página
 const fetchUrl = tool(async ({ url }) => {
@@ -249,6 +190,82 @@ export function getLLM() {
 // Criação do Agente com as regras de Tom de Voz e links
 export function createVerdadeAgent() {
     const llm = getLLM();
+    let searchCount = 0;
+
+    const searchWeb = tool(async ({ query }) => {
+        if (searchCount >= MAX_SEARCHES) {
+            console.log(`[Busca] Limite de ${MAX_SEARCHES} buscas atingido. Ignorando: "${query}"`);
+            return `Limite de buscas atingido. Use as informações já coletadas para elaborar a resposta final.`;
+        }
+        searchCount++;
+        console.log(`[Busca] Executando busca ${searchCount}/${MAX_SEARCHES} na Web para: "${query}"`);
+        const googleApiKey = process.env.GOOGLE_API_KEY;
+        const googleCx = process.env.GOOGLE_CX;
+
+        if (googleApiKey && googleCx && googleApiKey !== "your-google-api-key-here") {
+            try {
+                const googleController = new AbortController();
+                const googleTimeout = setTimeout(() => googleController.abort(), 5000);
+                const url = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleCx}&q=${encodeURIComponent(query)}`;
+                const response = await fetch(url, { signal: googleController.signal });
+                clearTimeout(googleTimeout);
+                const data = await response.json();
+                const results = data.items || [];
+                if (results.length > 0) {
+                    return results.map(r => `Título: ${r.title}\nURL: ${r.link}\nConteúdo: ${r.snippet}\n---`).join("\n");
+                }
+            } catch (error) {
+                console.error("[Busca] Erro na busca Google:", error.message);
+            }
+        }
+
+        // Fallback para busca gratuita via DuckDuckGo (Sem API Key)
+        try {
+            console.log(`[Busca] Utilizando busca gratuita do DuckDuckGo para: "${query}"`);
+            const ddgController = new AbortController();
+            const ddgTimeout = setTimeout(() => ddgController.abort(), 7000);
+            const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+            const response = await fetch(url, {
+                headers: {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                },
+                signal: ddgController.signal
+            });
+            clearTimeout(ddgTimeout);
+            if (response.ok) {
+                const html = await response.text();
+                const urlMatches = [...html.matchAll(/uddg=([^&"]+)/g)];
+                const snippetMatches = [...html.matchAll(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)];
+                if (urlMatches.length > 0) {
+                    return urlMatches.slice(0, 5).map((urlMatch, i) => {
+                        const cleanUrl = decodeURIComponent(urlMatch[1]);
+                        const snippet = snippetMatches[i]
+                            ? snippetMatches[i][1].replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim()
+                            : "";
+                        return `Resultado ${i + 1}:\nURL: ${cleanUrl}\nConteúdo: ${snippet}\n---`;
+                    }).join("\n");
+                }
+            }
+        } catch (error) {
+            console.error("[Busca] Erro na busca DuckDuckGo:", error.message);
+        }
+
+        // Último recurso: Fallback Mock funcional para testes offline
+        console.log("[Busca] Utilizando busca mock offline");
+        return `
+Título: Fato ou Fake: Checagem sobre "${query}"
+URL: https://g1.globo.com/fato-ou-fake/exemplo-checagem
+Conteúdo: Checagem realizada mostra que alegações recentes sobre "${query}" são enganosas. Órgãos oficiais desmentiram o boato.
+Data: 2026-05-20
+---
+`;
+    }, {
+        name: "web_search",
+        description: "Pesquisa na web para checagem de fatos e verificação de notícias. Obrigatório executar para validar alegações.",
+        schema: z.object({
+            query: z.string().describe("A frase ou termos de busca para pesquisar fatos no Google/Tavily.")
+        })
+    });
 
     const systemPrompt = `Você é o assistente oficial do e-verdade, um sistema inteligente de detecção de Fake News via WhatsApp.
 Seu objetivo é analisar mensagens enviadas pelos usuários, fazer buscas factuais na web para checar a veracidade e responder de forma adequada a cada perfil de usuário.
@@ -263,7 +280,10 @@ Atenção especial às regras de Tom de Voz e apresentação de fatos:
 Regra sobre links:
 Busque em no maximo 10 links para checar os fatos. Se encontrar uma notícia verdadeira, envie o link oficial da fonte confiável. Se for fake, envie o link da checagem oficial que desmente a informação.
 Se a resposta for para ser lida ou enviada como texto normal, inclua os links ao final do texto organizadamente.
-Se a mensagem atual estiver marcada como "is_audio" digite o texto de modo que seja confortavel para ser lido em TTS. Corte o texto em partes menores, evite frases longas e não inclua blocos de links. Nunca use [LINKS_START] ou [LINKS_END].
+Se a mensagem atual estiver marcada como "is_audio" digite o texto de modo que seja confortavel para ser lido em TTS. Corte o texto em partes menores, evite frases longas e não inclua blocos de links.
+
+REgra de ouro:
+Sempre inclua links usados na busca entre tags [LINKS_START] e [LINKS_END] para que o sistema de pós-processamento de áudio possa identificar e separar os links do texto principal, garantindo uma melhor experiência de leitura em voz alta. Inclua isso sempre.
 
 Regra de temporalidade (Timestamp):
 Ao verificar as notícias obtidas na busca, compare a data delas com o contexto atual. Se for uma notícia verdadeira antiga sendo compartilhada fora de contexto, marque como "⚠️ IMPRECISO" ou "🔴 FAKE" (dependendo do contexto) e explique claramente o ano em que o fato realmente ocorreu.

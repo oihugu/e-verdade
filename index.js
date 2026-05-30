@@ -92,13 +92,28 @@ async function isLinkValid(url) {
 	}
 }
 
+// Valida um conjunto de linhas em paralelo, retornando apenas as válidas
+async function filterLines(lines) {
+	const results = await Promise.all(lines.map(async (line) => {
+		const urls = line.match(/https?:\/\/[^\s\)\],]+/gi);
+		if (!urls || urls.length === 0) return line;
+
+		const validations = await Promise.all(urls.map(url => isLinkValid(url)));
+		if (validations.every(Boolean)) return line;
+
+		console.log(`[Validador Links] Removendo linha com link quebrado: "${line.trim()}"`);
+		return null;
+	}));
+	return results.filter(line => line !== null);
+}
+
 // Filtra links quebrados do texto da mensagem (deletando a linha/item da lista correspondente)
 async function filterBrokenLinks(text) {
 	if (!text) return '';
 
 	const startTag = '[LINKS_START]';
 	const endTag = '[LINKS_END]';
-	
+
 	let mainText = text;
 	let linksSection = '';
 
@@ -112,33 +127,7 @@ async function filterBrokenLinks(text) {
 	}
 
 	if (linksSection) {
-		const lines = linksSection.split('\n');
-		const validLines = [];
-		for (const line of lines) {
-			const urls = line.match(/https?:\/\/[^\s\)\],]+/gi);
-			if (urls && urls.length > 0) {
-				let allUrlsValid = true;
-				for (const url of urls) {
-					const valid = await isLinkValid(url);
-					if (!valid) {
-						allUrlsValid = false;
-						break;
-					}
-				}
-				if (allUrlsValid) {
-					validLines.push(line);
-				} else {
-					console.log(`[Validador Links] Removendo linha com link quebrado da lista: "${line.trim()}"`);
-				}
-			} else {
-				validLines.push(line);
-			}
-		}
-		
-		// Filtra linhas vazias remanescentes no bloco de links
-		const cleanedLines = validLines.filter(l => l.trim().length > 0);
-		
-		// Verifica se ainda resta algum link
+		const cleanedLines = (await filterLines(linksSection.split('\n'))).filter(l => l.trim().length > 0);
 		const hasLinks = cleanedLines.some(l => l.match(/https?:\/\/[^\s\)\],]+/gi));
 		if (hasLinks) {
 			return `${mainText}\n\n${startTag}\n${cleanedLines.join('\n')}\n${endTag}`;
@@ -147,29 +136,8 @@ async function filterBrokenLinks(text) {
 		}
 	}
 
-	// Caso não existam as tags de links explícitas, verifica o texto completo linha por linha
-	const lines = text.split('\n');
-	const validLines = [];
-	for (const line of lines) {
-		const urls = line.match(/https?:\/\/[^\s\)\],]+/gi);
-		if (urls && urls.length > 0) {
-			let allUrlsValid = true;
-			for (const url of urls) {
-				const valid = await isLinkValid(url);
-				if (!valid) {
-					allUrlsValid = false;
-					break;
-				}
-			}
-			if (allUrlsValid) {
-				validLines.push(line);
-			} else {
-				console.log(`[Validador Links] Removendo linha com link quebrado do texto: "${line.trim()}"`);
-			}
-		} else {
-			validLines.push(line);
-		}
-	}
+	// Caso não existam as tags de links explícitas, verifica o texto completo em paralelo
+	const validLines = await filterLines(text.split('\n'));
 	return validLines.join('\n');
 }
 
@@ -189,9 +157,6 @@ function saveUserMemory(senderNumber, record) {
 		console.error(`[Memória] Erro ao salvar arquivo de memória de ${senderNumber}:`, e.message);
 	}
 }
-
-// Inicializa o agente da checagem de fatos
-const agent = createVerdadeAgent();
 
 const client = new Client({
 	authStrategy: new LocalAuth(),
@@ -352,6 +317,8 @@ client.on('message', async (msg) => {
 		}
 	};
 
+	// Novo agente por mensagem garante contador de buscas zerado a cada checagem
+	const agent = createVerdadeAgent();
 	console.log(`[Orquestrador] Iniciando checagem. Thread ID: ${threadId}`);
 	try {
 		// Carrega o histórico enviado anteriormente para injetar no contexto
