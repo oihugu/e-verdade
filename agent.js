@@ -164,13 +164,8 @@ export function createVerdadeAgent() {
     const llm = getLLM();
     let searchCount = 0;
 
-    const searchWeb = tool(async ({ query }) => {
-        if (searchCount >= MAX_SEARCHES) {
-            console.log(`[Busca] Limite de ${MAX_SEARCHES} buscas atingido. Ignorando: "${query}"`);
-            return `Limite de buscas atingido. Use as informações já coletadas para elaborar a resposta final.`;
-        }
-        searchCount++;
-        console.log(`[Busca] Executando busca ${searchCount}/${MAX_SEARCHES} na Web para: "${query}"`);
+    // Executa uma única busca HTTP (Google → DuckDuckGo → mock)
+    async function performSearch(query) {
         const googleApiKey = process.env.GOOGLE_API_KEY;
         const googleCx = process.env.GOOGLE_CX;
 
@@ -191,16 +186,12 @@ export function createVerdadeAgent() {
             }
         }
 
-        // Fallback para busca gratuita via DuckDuckGo (Sem API Key)
         try {
-            console.log(`[Busca] Utilizando busca gratuita do DuckDuckGo para: "${query}"`);
             const ddgController = new AbortController();
             const ddgTimeout = setTimeout(() => ddgController.abort(), 7000);
             const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
             const response = await fetch(url, {
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                },
+                headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
                 signal: ddgController.signal
             });
             clearTimeout(ddgTimeout);
@@ -222,20 +213,44 @@ export function createVerdadeAgent() {
             console.error("[Busca] Erro na busca DuckDuckGo:", error.message);
         }
 
-        // Último recurso: Fallback Mock funcional para testes offline
         console.log("[Busca] Utilizando busca mock offline");
-        return `
-Título: Fato ou Fake: Checagem sobre "${query}"
-URL: https://g1.globo.com/fato-ou-fake/exemplo-checagem
-Conteúdo: Checagem realizada mostra que alegações recentes sobre "${query}" são enganosas. Órgãos oficiais desmentiram o boato.
-Data: 2026-05-20
----
-`;
+        return `Título: Fato ou Fake: Checagem sobre "${query}"\nURL: https://g1.globo.com/fato-ou-fake/exemplo-checagem\nConteúdo: Checagem realizada mostra que alegações recentes sobre "${query}" são enganosas. Órgãos oficiais desmentiram o boato.\nData: 2026-05-20\n---`;
+    }
+
+    // Busca única (usada quando só há um termo a pesquisar)
+    const searchWeb = tool(async ({ query }) => {
+        if (searchCount >= MAX_SEARCHES) {
+            console.log(`[Busca] Limite de ${MAX_SEARCHES} buscas atingido. Ignorando: "${query}"`);
+            return `Limite de buscas atingido. Use as informações já coletadas para elaborar a resposta final.`;
+        }
+        searchCount++;
+        console.log(`[Busca] Executando busca ${searchCount}/${MAX_SEARCHES} para: "${query}"`);
+        return performSearch(query);
     }, {
         name: "web_search",
-        description: "Pesquisa na web para checagem de fatos e verificação de notícias. Obrigatório executar para validar alegações.",
+        description: "Pesquisa um único termo na web. Use batch_web_search se tiver múltiplos termos para pesquisar ao mesmo tempo.",
         schema: z.object({
-            query: z.string().describe("A frase ou termos de busca para pesquisar fatos no Google/Tavily.")
+            query: z.string().describe("O termo ou frase a ser pesquisado.")
+        })
+    });
+
+    // Busca em lote: executa múltiplas queries em paralelo numa única chamada
+    const batchSearchWeb = tool(async ({ queries }) => {
+        const available = MAX_SEARCHES - searchCount;
+        if (available <= 0) {
+            console.log(`[Busca] Limite de ${MAX_SEARCHES} buscas atingido. Ignorando lote.`);
+            return `Limite de buscas atingido. Use as informações já coletadas para elaborar a resposta final.`;
+        }
+        const toSearch = queries.slice(0, available);
+        searchCount += toSearch.length;
+        console.log(`[Busca] Executando ${toSearch.length} buscas em paralelo (${searchCount}/${MAX_SEARCHES}): ${toSearch.map(q => `"${q}"`).join(", ")}`);
+        const results = await Promise.all(toSearch.map(q => performSearch(q)));
+        return results.map((r, i) => `=== Busca ${i + 1}: "${toSearch[i]}" ===\n${r}`).join("\n\n");
+    }, {
+        name: "batch_web_search",
+        description: "Executa múltiplas buscas na web simultaneamente (em paralelo). PREFIRA esta ferramenta sempre que precisar pesquisar mais de um termo — é muito mais rápido do que chamadas sequenciais ao web_search.",
+        schema: z.object({
+            queries: z.array(z.string()).min(2).max(MAX_SEARCHES).describe("Lista de termos de busca para pesquisar em paralelo.")
         })
     });
 
@@ -249,26 +264,27 @@ Atenção especial às regras de Tom de Voz e apresentação de fatos:
 2. Seja extremamente neutro, objetivo, jornalístico e apresente fatos sem dar lição de moral.
 3. Use uma linguagem calorosa, acolhedora, respeitosa ("Olá, Dona Maria...").
 
-Regra sobre links:
-Busque em no maximo 10 links para checar os fatos. Se encontrar uma notícia verdadeira, envie o link oficial da fonte confiável. Se for fake, envie o link da checagem oficial que desmente a informação.
+Regra de busca (IMPORTANTE):
+Você tem no máximo ${MAX_SEARCHES} buscas por checagem. Para aproveitar ao máximo, use SEMPRE a ferramenta 'batch_web_search' quando precisar pesquisar mais de um termo — ela executa todas as buscas simultaneamente, sendo muito mais rápida. Use 'web_search' apenas quando houver um único termo a pesquisar.
+Se encontrar uma notícia verdadeira, envie o link oficial da fonte confiável. Se for fake, envie o link da checagem oficial que desmente a informação.
 Se a resposta for para ser lida ou enviada como texto normal, inclua os links ao final do texto organizadamente.
 Se a mensagem atual estiver marcada como "is_audio" digite o texto de modo que seja confortavel para ser lido em TTS. Corte o texto em partes menores, evite frases longas e não inclua blocos de links.
 
-REgra de ouro:
+Regra de ouro:
 Sempre inclua links usados na busca entre tags [LINKS_START] e [LINKS_END] para que o sistema de pós-processamento de áudio possa identificar e separar os links do texto principal, garantindo uma melhor experiência de leitura em voz alta. Inclua isso sempre.
 
 Regras de mitigação de loop de busca:
 1. Se você for solicitado a reenviar os links ou fontes de checagens que já constam no histórico da conversa (ex: "me mande os links"), tente usar as fontes e nomes que já estão citados na memória do histórico de checagens. Se precisar pesquisar, faça apenas uma busca rápida.
-2. Não realize mais do que 3 buscas na web no total para a mesma mensagem. Se os links retornarem erro 404 (página não encontrada) ou falharem ao carregar, interrompa as tentativas. Apresente o veredicto com as informações textuais que você tem e explique de forma direta que não há links adicionais ativos disponíveis no momento.
+2. Se os links retornarem erro 404 (página não encontrada) ou falharem ao carregar, interrompa as tentativas. Apresente o veredicto com as informações textuais que você tem e explique de forma direta que não há links adicionais ativos disponíveis no momento.
 
 Regra de temporalidade (Timestamp):
 Ao verificar as notícias obtidas na busca, compare a data delas com o contexto atual. Se for uma notícia verdadeira antiga sendo compartilhada fora de contexto, marque como "⚠️ IMPRECISO" ou "🔴 FAKE" (dependendo do contexto) e explique claramente o ano em que o fato realmente ocorreu.
 
-Você DEVE usar a ferramenta 'web_search' sempre que houver qualquer dúvida factual para checar nos sites oficiais e agências de checagem.`;
+Você DEVE usar as ferramentas de busca sempre que houver qualquer dúvida factual para checar nos sites oficiais e agências de checagem.`;
 
     return createDeepAgent({
         model: llm,
-        tools: [searchWeb, fetchUrl],
+        tools: [searchWeb, batchSearchWeb, fetchUrl],
         systemPrompt: systemPrompt
     });
 }
