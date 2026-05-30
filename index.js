@@ -314,7 +314,8 @@ client.on('message', async (msg) => {
 	const config = {
 		configurable: {
 			thread_id: threadId
-		}
+		},
+		recursionLimit: 20
 	};
 
 	// Novo agente por mensagem garante contador de buscas zerado a cada checagem

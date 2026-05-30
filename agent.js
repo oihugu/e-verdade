@@ -47,37 +47,9 @@ ChatOpenAI.prototype.invoke = async function (messages, options) {
             const hasToolCalls = (msg.tool_calls && msg.tool_calls.length > 0) ||
                                  (msg.additional_kwargs && msg.additional_kwargs.tool_calls && msg.additional_kwargs.tool_calls.length > 0);
             if (hasToolCalls) {
-                let toolQueries = [];
-                if (msg.tool_calls && msg.tool_calls.length > 0) {
-                    toolQueries = msg.tool_calls.map(tc => {
-                        if (tc.name === 'web_search') return `busca por "${tc.args.query || JSON.stringify(tc.args)}"`;
-                        if (tc.name === 'fetch_url') return `leitura do link "${tc.args.url || JSON.stringify(tc.args)}"`;
-                        return tc.name;
-                    });
-                } else if (msg.additional_kwargs && msg.additional_kwargs.tool_calls && msg.additional_kwargs.tool_calls.length > 0) {
-                    toolQueries = msg.additional_kwargs.tool_calls.map(tc => {
-                        if (tc.function && tc.function.name === 'web_search') {
-                            try {
-                                const args = JSON.parse(tc.function.arguments);
-                                return `busca por "${args.query || JSON.stringify(args)}"`;
-                            } catch (e) {
-                                return `busca por "${tc.function.arguments}"`;
-                            }
-                        }
-                        if (tc.function && tc.function.name === 'fetch_url') {
-                            try {
-                                const args = JSON.parse(tc.function.arguments);
-                                return `leitura do link "${args.url || JSON.stringify(args)}"`;
-                            } catch (e) {
-                                return `leitura do link "${tc.function.arguments}"`;
-                            }
-                        }
-                        return tc.function ? tc.function.name : 'ferramenta';
-                    });
-                }
-                console.log(`  [LLM Override] Transformando AIMessage com tool_calls para AIMessage plano. Queries: ${toolQueries.join(', ')}`);
+                console.log(`  [LLM Override] Transformando AIMessage com tool_calls para AIMessage plano contendo "[Pesquisando...]"`);
                 return new AIMessage({
-                    content: `Pesquisando o contexto: executando ${toolQueries.join(', ')}.`
+                    content: `[Pesquisando...]`
                 });
             }
         }
@@ -284,6 +256,10 @@ Se a mensagem atual estiver marcada como "is_audio" digite o texto de modo que s
 
 REgra de ouro:
 Sempre inclua links usados na busca entre tags [LINKS_START] e [LINKS_END] para que o sistema de pós-processamento de áudio possa identificar e separar os links do texto principal, garantindo uma melhor experiência de leitura em voz alta. Inclua isso sempre.
+
+Regras de mitigação de loop de busca:
+1. Se você for solicitado a reenviar os links ou fontes de checagens que já constam no histórico da conversa (ex: "me mande os links"), tente usar as fontes e nomes que já estão citados na memória do histórico de checagens. Se precisar pesquisar, faça apenas uma busca rápida.
+2. Não realize mais do que 3 buscas na web no total para a mesma mensagem. Se os links retornarem erro 404 (página não encontrada) ou falharem ao carregar, interrompa as tentativas. Apresente o veredicto com as informações textuais que você tem e explique de forma direta que não há links adicionais ativos disponíveis no momento.
 
 Regra de temporalidade (Timestamp):
 Ao verificar as notícias obtidas na busca, compare a data delas com o contexto atual. Se for uma notícia verdadeira antiga sendo compartilhada fora de contexto, marque como "⚠️ IMPRECISO" ou "🔴 FAKE" (dependendo do contexto) e explique claramente o ano em que o fato realmente ocorreu.
