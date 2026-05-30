@@ -10,21 +10,21 @@ O e-verdade é projetado como uma arquitetura orientada a serviços e baseada em
 
 ```mermaid
 graph TD
-    subgraph Cliente (WhatsApp)
+    subgraph "Cliente (WhatsApp)"
         A[Usuário] <-->|Mensagens / Áudio| B[WhatsApp Business / API]
     end
 
-    subgraph Integração & Gateway
+    subgraph "Integração & Gateway"
         B <-->|Webhooks & Send API| C[Zap Bridge / Webhook Handler]
     end
 
-    subgraph Cérebro (Orquestrador)
+    subgraph "Cérebro (Orquestrador)"
         C <-->|Mensagens Ingestão| D[Orquestrador LLM]
         D -->|Transcrição se Áudio| E[Speech-to-Text]
         D -->|Síntese se Maria| F[Text-to-Speech]
     end
 
-    subgraph Verificação de Dados
+    subgraph "Verificação de Dados"
         D <-->|Refinamento & Busca| G[Mecanismo de Busca na Web]
         G <-->|Filtro de Domínios Confiáveis| H((Bases de Fact-Checking))
     end
