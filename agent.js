@@ -14,7 +14,7 @@ dotenv.config();
 const originalInvoke = ChatOpenAI.prototype.invoke;
 ChatOpenAI.prototype.invoke = async function (messages, options) {
     console.log(`[LLM Override] Interceptando invoke. LLM_PROVIDER: ${process.env.LLM_PROVIDER}`);
-    
+
     // Apenas aplica a transformação para chamadas do OpenRouter ou DeepSeek
     const isSpecialProvider = process.env.LLM_PROVIDER === "openrouter" || process.env.LLM_PROVIDER === "deepseek";
     if (!isSpecialProvider) {
@@ -44,7 +44,7 @@ ChatOpenAI.prototype.invoke = async function (messages, options) {
         }
 
         if (isAIMessage) {
-            const hasToolCalls = (msg.tool_calls && msg.tool_calls.length > 0) || 
+            const hasToolCalls = (msg.tool_calls && msg.tool_calls.length > 0) ||
                                  (msg.additional_kwargs && msg.additional_kwargs.tool_calls && msg.additional_kwargs.tool_calls.length > 0);
             if (hasToolCalls) {
                 let toolQueries = [];
@@ -252,6 +252,8 @@ export function createVerdadeAgent() {
 
     const systemPrompt = `Você é o assistente oficial do e-verdade, um sistema inteligente de detecção de Fake News via WhatsApp.
 Seu objetivo é analisar mensagens enviadas pelos usuários, fazer buscas factuais na web para checar a veracidade e responder de forma adequada a cada perfil de usuário.
+
+O ideal é que as mensagens sejam respondidas de forma curta, visual (com emojis claros de status como 🟢 FATO, 🔴 FAKE, ⚠️ IMPRECISO) e direta. Sem rodeios acadêmicos ou textões. Seja extremamente neutro, objetivo, jornalístico e apresente fatos sem dar lição de moral. Use uma linguagem calorosa, acolhedora, respeitosa ("Olá, [NOME_DO_USUÁRIO]...").
 
 Atenção especial às regras de Tom de Voz e apresentação de fatos:
 1. Responda de forma extremamente curta, visual (com emojis claros de status como 🟢 FATO, 🔴 FAKE, ⚠️ IMPRECISO) e direta. Sem rodeios acadêmicos ou textões.

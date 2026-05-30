@@ -278,7 +278,7 @@ client.on('message', async (msg) => {
 		};
 		saveUserMemory(senderNumber, newRecord);
 
-		// Processa separação de links caso seja resposta em áudio (Dona Maria / !audio)
+		// Processa separação de links caso seja resposta em áudio ( !audio)
 		let replyText = finalMessage;
 		let linksText = '';
 
