@@ -349,7 +349,8 @@ client.on('message', async (msg) => {
 	const config = {
 		configurable: {
 			thread_id: threadId
-		}
+		},
+		recursionLimit: 20
 	};
 
 	console.log(`[Orquestrador] Iniciando checagem. Thread ID: ${threadId}`);
