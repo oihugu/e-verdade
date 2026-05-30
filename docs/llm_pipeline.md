@@ -22,11 +22,10 @@ graph TD
 
 ## Detalhamento das Fases
 
-### Fase 1: Higienização do Contexto (Context Sanitization) e Extração
-*   **Objetivo:** Limpar e resetar o histórico de contexto/memória da sessão do agente a cada execução para garantir que interações anteriores não enviesem a checagem atual. Adicionalmente, isolar o núcleo da mensagem.
+### Fase 1: Higienização do Contexto (Context Sanitization) e Identficação da Noticia
+*   **Objetivo:** Limpar e resetar o histórico de contexto/memória da sessão do agente quando uma noticia for identificada para garantir que interações anteriores não enviesem a checagem atual. Adicionalmente, isolar o núcleo da mensagem.
 *   **Ações:**
     *   **Higienização do Contexto:** Esvaziar buffers de memória ou contextos acumulados de sessões passadas. Cada nova verificação factual deve começar de um estado "limpo" (clean state), prevenindo a contaminação factual ou ideológica entre diferentes usuários ou execuções.
-    *   **Limpeza e Extração:** Remover emojis repetidos, formatações excessivas e marcadores de correntes de encaminhamento (ex: *"URGENTE"*, *"REPASSEM DIRETO DO GRUPO"*), isolando o texto/alegação central.
 
 ### Fase 2: Classificação e Filtro
 *   **Objetivo:** Identificar se a mensagem contém uma alegação factual verificável.
@@ -52,4 +51,5 @@ graph TD
 *   **Diretrizes de Tom:**
     1.  **Linguagem Amigável:** Evitar arrogância acadêmica. Explicar o porquê de forma simples.
     2.  **Neutralidade:** Não tomar partido político, focar nos fatos e em fontes qualificadas.
-    3.  **Acessibilidade:** Preparar uma versão da mensagem formatada para leitura fácil (bullet points curtos) e uma estrutura textual otimizada para o motor de **Text-to-Speech** (áudio), removendo URLs e caracteres especiais que soam estranhos ao serem lidos.
+    3.  **Acessibilidade:** Preparar uma versão da mensagem formatada para leitura fácil (bullet points curtos) e uma estrutura textual otimizada para o motor
+	4.  **Text-to-Speech** (caso seja áudio), removendo URLs e caracteres especiais que soam estranhos ao serem lidos. -> mandar os links em uma mensagem organizada seguida.
