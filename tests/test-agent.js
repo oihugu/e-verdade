@@ -76,6 +76,15 @@ async function runTests() {
                 ]
             }, config);
 
+            console.log(`\n=== MENSAGENS RETORNADAS PELO AGENTE ===`);
+            resultState.messages.forEach((msg, idx) => {
+                console.log(`[Msg ${idx}] Role: ${msg.role || msg.constructor.name} | Content length: ${msg.content ? msg.content.length : 0}`);
+                if (msg.content) {
+                    console.log(`  Preview: ${JSON.stringify(msg.content.substring(0, 80))}`);
+                }
+            });
+            console.log(`========================================\n`);
+
             const finalMessage = resultState.messages[resultState.messages.length - 1].content;
             console.log('\n[Agente] Resposta do Agente:\n');
 
