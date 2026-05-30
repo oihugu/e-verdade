@@ -67,6 +67,41 @@ Data: 2026-05-20
     })
 });
 
+// Ferramenta de leitura de link/URL para extrair o conteúdo de texto da página
+const fetchUrl = tool(async ({ url }) => {
+    console.log(`[Link] Acessando URL para extrair conteúdo: "${url}"`);
+    try {
+        const response = await fetch(url, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`Status ${response.status}`);
+        }
+        const html = await response.text();
+        // Remove tags de scripts, estilos e tags HTML normais para sobrar apenas o texto limpo
+        const cleanText = html
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+            .replace(/<[^>]*>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        
+        // Retorna os primeiros 4000 caracteres para não estourar o limite de tokens do LLM
+        return cleanText.substring(0, 4000);
+    } catch (error) {
+        console.error(`[Link] Erro ao acessar a URL ${url}:`, error.message);
+        return `Erro ao carregar o conteúdo da URL: ${error.message}`;
+    }
+}, {
+    name: "fetch_url",
+    description: "Lê e extrai o conteúdo em texto de um link/URL enviado para checagem de fatos.",
+    schema: z.object({
+        url: z.string().url().describe("A URL completa do link/site que o agente precisa ler.")
+    })
+});
+
 // Inicialização do modelo LLM (OpenAI, OpenRouter ou DeepSeek)
 export function getLLM() {
     const provider = process.env.LLM_PROVIDER || "openai";
@@ -140,7 +175,7 @@ Você DEVE usar a ferramenta 'web_search' sempre que houver qualquer dúvida fac
 
     return createDeepAgent({
         model: llm,
-        tools: [searchWeb],
+        tools: [searchWeb, fetchUrl],
         systemPrompt: systemPrompt
     });
 }
