@@ -1,0 +1,19 @@
+{
+  "name": "e-verdade",
+  "version": "1.0.0",
+  "description": "Fake News Detector via WhatsApp",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.23.0",
+    "qrcode-terminal": "^0.12.0",
+    "dotenv": "^16.4.5",
+    "deepagents": "latest",
+    "@langchain/openai": "latest",
+    "@langchain/core": "latest",
+    "@langchain/langgraph": "latest"
+  }
+}
