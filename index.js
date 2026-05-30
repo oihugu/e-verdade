@@ -46,6 +46,134 @@ async function improve_for_tts(audio_to_improve) {
 	}
 }
 
+// Função para verificar se um link está ativo (retorna status 2xx ou 3xx)
+async function isLinkValid(url) {
+	try {
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 3000);
+		
+		let response;
+		try {
+			response = await fetch(url, {
+				method: 'HEAD',
+				headers: {
+					'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+				},
+				signal: controller.signal
+			});
+		} catch (e) {
+			// Tenta com GET a seguir
+		}
+		
+		clearTimeout(timeoutId);
+		
+		if (response && response.status >= 200 && response.status < 400) {
+			return true;
+		}
+		
+		// Fallback para GET se HEAD falhar ou retornar status não-2xx/3xx
+		const getController = new AbortController();
+		const getTimeoutId = setTimeout(() => getController.abort(), 4000);
+		
+		const getResponse = await fetch(url, {
+			method: 'GET',
+			headers: {
+				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+			},
+			signal: getController.signal
+		});
+		
+		clearTimeout(getTimeoutId);
+		
+		return getResponse.status >= 200 && getResponse.status < 400;
+	} catch (error) {
+		console.log(`[Validador Links] Link inválido ou inacessível: ${url} (Erro: ${error.message})`);
+		return false;
+	}
+}
+
+// Filtra links quebrados do texto da mensagem (deletando a linha/item da lista correspondente)
+async function filterBrokenLinks(text) {
+	if (!text) return '';
+
+	const startTag = '[LINKS_START]';
+	const endTag = '[LINKS_END]';
+	
+	let mainText = text;
+	let linksSection = '';
+
+	if (text.includes(startTag)) {
+		const startIdx = text.indexOf(startTag);
+		const endIdx = text.indexOf(endTag);
+		if (endIdx > startIdx) {
+			mainText = text.substring(0, startIdx).trim();
+			linksSection = text.substring(startIdx + startTag.length, endIdx).trim();
+		}
+	}
+
+	if (linksSection) {
+		const lines = linksSection.split('\n');
+		const validLines = [];
+		for (const line of lines) {
+			const urls = line.match(/https?:\/\/[^\s\)\],]+/gi);
+			if (urls && urls.length > 0) {
+				let allUrlsValid = true;
+				for (const url of urls) {
+					const valid = await isLinkValid(url);
+					if (!valid) {
+						allUrlsValid = false;
+						break;
+					}
+				}
+				if (allUrlsValid) {
+					validLines.push(line);
+				} else {
+					console.log(`[Validador Links] Removendo linha com link quebrado da lista: "${line.trim()}"`);
+				}
+			} else {
+				validLines.push(line);
+			}
+		}
+		
+		// Filtra linhas vazias remanescentes no bloco de links
+		const cleanedLines = validLines.filter(l => l.trim().length > 0);
+		
+		// Verifica se ainda resta algum link
+		const hasLinks = cleanedLines.some(l => l.match(/https?:\/\/[^\s\)\],]+/gi));
+		if (hasLinks) {
+			return `${mainText}\n\n${startTag}\n${cleanedLines.join('\n')}\n${endTag}`;
+		} else {
+			return mainText;
+		}
+	}
+
+	// Caso não existam as tags de links explícitas, verifica o texto completo linha por linha
+	const lines = text.split('\n');
+	const validLines = [];
+	for (const line of lines) {
+		const urls = line.match(/https?:\/\/[^\s\)\],]+/gi);
+		if (urls && urls.length > 0) {
+			let allUrlsValid = true;
+			for (const url of urls) {
+				const valid = await isLinkValid(url);
+				if (!valid) {
+					allUrlsValid = false;
+					break;
+				}
+			}
+			if (allUrlsValid) {
+				validLines.push(line);
+			} else {
+				console.log(`[Validador Links] Removendo linha com link quebrado do texto: "${line.trim()}"`);
+			}
+		} else {
+			validLines.push(line);
+		}
+	}
+	return validLines.join('\n');
+}
+
+
 // Função para salvar uma nova checagem na memória do número
 function saveUserMemory(senderNumber, record) {
 	const filePath = path.join(MEMORY_DIR, `${senderNumber}.json`);
@@ -266,15 +394,16 @@ client.on('message', async (msg) => {
 			}
 		});
 		console.log(`========================================\n`);
-
-		const finalMessage = resultState.messages[resultState.messages.length - 1].content;
-		console.log(`[Orquestrador] Resposta final gerada. - Conteúdo: "${finalMessage}"`);
+		const rawFinalMessage = resultState.messages[resultState.messages.length - 1].content || '';
+		console.log(`[Orquestrador] Validando e filtrando links da resposta final...`);
+		const finalMessage = await filterBrokenLinks(rawFinalMessage);
+		console.log(`[Orquestrador] Resposta final processada. - Conteúdo: "${finalMessage}"`);
 
 		// Salva a checagem atual no histórico deste usuário
 		const newRecord = {
 			date: new Date().toISOString().split('T')[0],
 			query: userText,
-			summary: (finalMessage || '').replace(/[\*\_\[\]]/g, '').substring(0, 300).trim() + "..."
+			summary: finalMessage.replace(/[\*\_\[\]]/g, '').substring(0, 300).trim() + "..."
 		};
 		saveUserMemory(senderNumber, newRecord);
 
