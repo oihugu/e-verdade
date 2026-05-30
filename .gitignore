@@ -1,5 +1,10 @@
 
 node_modules
+bridge/node_modules
+bridge/.wwebjs_auth
+bridge/.wwebjs_cache
+bridge/.env
 .wwebjs_auth
 .wwebjs_cache
 .env
+temp*.ogg
