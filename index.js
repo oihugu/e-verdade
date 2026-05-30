@@ -239,6 +239,18 @@ client.on('message', async (msg) => {
         }, config);
 
         // A última mensagem do estado retornado é a resposta final do LLM
+        console.log(`\n=== MENSAGENS RETORNADAS PELO AGENTE ===`);
+        resultState.messages.forEach((msg, idx) => {
+            console.log(`[Msg ${idx}] Role: ${msg.role || msg.constructor.name} | Content length: ${msg.content ? msg.content.length : 0}`);
+            if (msg.content) {
+                console.log(`  Preview: ${JSON.stringify(msg.content.substring(0, 80))}`);
+            }
+            if (msg.tool_calls && msg.tool_calls.length > 0) {
+                console.log(`  Tool Calls: ${JSON.stringify(msg.tool_calls)}`);
+            }
+        });
+        console.log(`========================================\n`);
+
         const finalMessage = resultState.messages[resultState.messages.length - 1].content;
         console.log(`[Orquestrador] Resposta final gerada.`);
 
@@ -246,7 +258,7 @@ client.on('message', async (msg) => {
         const newRecord = {
             date: new Date().toISOString().split('T')[0],
             query: userText,
-            summary: finalMessage.replace(/[\*\_\[\]]/g, '').substring(0, 300).trim() + "..."
+            summary: (finalMessage || '').replace(/[\*\_\[\]]/g, '').substring(0, 300).trim() + "..."
         };
         saveUserMemory(senderNumber, newRecord);
 
