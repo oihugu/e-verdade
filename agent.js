@@ -47,37 +47,9 @@ ChatOpenAI.prototype.invoke = async function (messages, options) {
             const hasToolCalls = (msg.tool_calls && msg.tool_calls.length > 0) ||
                                  (msg.additional_kwargs && msg.additional_kwargs.tool_calls && msg.additional_kwargs.tool_calls.length > 0);
             if (hasToolCalls) {
-                let toolQueries = [];
-                if (msg.tool_calls && msg.tool_calls.length > 0) {
-                    toolQueries = msg.tool_calls.map(tc => {
-                        if (tc.name === 'web_search') return `busca por "${tc.args.query || JSON.stringify(tc.args)}"`;
-                        if (tc.name === 'fetch_url') return `leitura do link "${tc.args.url || JSON.stringify(tc.args)}"`;
-                        return tc.name;
-                    });
-                } else if (msg.additional_kwargs && msg.additional_kwargs.tool_calls && msg.additional_kwargs.tool_calls.length > 0) {
-                    toolQueries = msg.additional_kwargs.tool_calls.map(tc => {
-                        if (tc.function && tc.function.name === 'web_search') {
-                            try {
-                                const args = JSON.parse(tc.function.arguments);
-                                return `busca por "${args.query || JSON.stringify(args)}"`;
-                            } catch (e) {
-                                return `busca por "${tc.function.arguments}"`;
-                            }
-                        }
-                        if (tc.function && tc.function.name === 'fetch_url') {
-                            try {
-                                const args = JSON.parse(tc.function.arguments);
-                                return `leitura do link "${args.url || JSON.stringify(args)}"`;
-                            } catch (e) {
-                                return `leitura do link "${tc.function.arguments}"`;
-                            }
-                        }
-                        return tc.function ? tc.function.name : 'ferramenta';
-                    });
-                }
-                console.log(`  [LLM Override] Transformando AIMessage com tool_calls para AIMessage plano. Queries: ${toolQueries.join(', ')}`);
+                console.log(`  [LLM Override] Transformando AIMessage com tool_calls para AIMessage plano contendo "[Pesquisando...]"`);
                 return new AIMessage({
-                    content: `Pesquisando o contexto: executando ${toolQueries.join(', ')}.`
+                    content: `[Pesquisando...]`
                 });
             }
         }
