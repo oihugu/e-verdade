@@ -3,8 +3,101 @@ import { ChatOpenAI } from "@langchain/openai";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import dotenv from "dotenv";
+import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 
 dotenv.config();
+
+// Adaptador de histórico de ferramentas para OpenRouter/DeepSeek:
+// Intercepta todas as invocações de instâncias de ChatOpenAI e transforma ToolMessages e AIMessages (com tool_calls)
+// do histórico em mensagens normais de texto (estilo ReAct). Isso previne bugs de parser de ferramentas na API do OpenRouter
+// que geram respostas vazias (tamanho zero) após a execução de buscas.
+const originalInvoke = ChatOpenAI.prototype.invoke;
+ChatOpenAI.prototype.invoke = async function (messages, options) {
+    console.log(`[LLM Override] Interceptando invoke. LLM_PROVIDER: ${process.env.LLM_PROVIDER}`);
+    
+    // Apenas aplica a transformação para chamadas do OpenRouter ou DeepSeek
+    const isSpecialProvider = process.env.LLM_PROVIDER === "openrouter" || process.env.LLM_PROVIDER === "deepseek";
+    if (!isSpecialProvider) {
+        console.log(`[LLM Override] Ignorando transformação (não é provedor especial).`);
+        return originalInvoke.call(this, messages, options);
+    }
+
+    const wasArray = Array.isArray(messages);
+    const msgArray = wasArray ? messages : [messages];
+    console.log(`[LLM Override] Mensagens recebidas: ${msgArray.length}`);
+    msgArray.forEach((msg, idx) => {
+        if (!msg) return;
+        const typeName = msg.constructor?.name || typeof msg;
+        console.log(`  - Msg [${idx}] (${typeName}): role=${msg.role || msg.type}, contentLength=${msg.content ? (typeof msg.content === 'string' ? msg.content.length : JSON.stringify(msg.content).length) : 0}`);
+    });
+
+    const transformedMessages = msgArray.map(msg => {
+        if (!msg) return msg;
+        const isToolMessage = msg.role === 'tool' || msg.constructor.name === 'ToolMessage' || msg.type === 'tool';
+        const isAIMessage = msg.role === 'assistant' || msg.constructor.name === 'AIMessage' || msg.type === 'ai';
+
+        if (isToolMessage) {
+            console.log(`  [LLM Override] Transformando ToolMessage para HumanMessage: content="${String(msg.content).substring(0, 50)}..."`);
+            return new HumanMessage({
+                content: `[Resultado da busca/ferramenta]:\n${msg.content}`
+            });
+        }
+
+        if (isAIMessage) {
+            const hasToolCalls = (msg.tool_calls && msg.tool_calls.length > 0) || 
+                                 (msg.additional_kwargs && msg.additional_kwargs.tool_calls && msg.additional_kwargs.tool_calls.length > 0);
+            if (hasToolCalls) {
+                let toolQueries = [];
+                if (msg.tool_calls && msg.tool_calls.length > 0) {
+                    toolQueries = msg.tool_calls.map(tc => {
+                        if (tc.name === 'web_search') return `busca por "${tc.args.query || JSON.stringify(tc.args)}"`;
+                        if (tc.name === 'fetch_url') return `leitura do link "${tc.args.url || JSON.stringify(tc.args)}"`;
+                        return tc.name;
+                    });
+                } else if (msg.additional_kwargs && msg.additional_kwargs.tool_calls && msg.additional_kwargs.tool_calls.length > 0) {
+                    toolQueries = msg.additional_kwargs.tool_calls.map(tc => {
+                        if (tc.function && tc.function.name === 'web_search') {
+                            try {
+                                const args = JSON.parse(tc.function.arguments);
+                                return `busca por "${args.query || JSON.stringify(args)}"`;
+                            } catch (e) {
+                                return `busca por "${tc.function.arguments}"`;
+                            }
+                        }
+                        if (tc.function && tc.function.name === 'fetch_url') {
+                            try {
+                                const args = JSON.parse(tc.function.arguments);
+                                return `leitura do link "${args.url || JSON.stringify(args)}"`;
+                            } catch (e) {
+                                return `leitura do link "${tc.function.arguments}"`;
+                            }
+                        }
+                        return tc.function ? tc.function.name : 'ferramenta';
+                    });
+                }
+                console.log(`  [LLM Override] Transformando AIMessage com tool_calls para AIMessage plano. Queries: ${toolQueries.join(', ')}`);
+                return new AIMessage({
+                    content: `Pesquisando o contexto: executando ${toolQueries.join(', ')}.`
+                });
+            }
+        }
+        return msg;
+    });
+
+    console.log(`[LLM Override] Chamando originalInvoke...`);
+    try {
+        const finalInput = wasArray ? transformedMessages : transformedMessages[0];
+        const result = await originalInvoke.call(this, finalInput, options);
+        const resType = result?.constructor?.name || typeof result;
+        const resContent = result?.content || '';
+        const resToolCalls = result?.tool_calls || [];
+        console.log(`[LLM Override] Resposta recebida (${resType}): contentLength=${resContent.length || 0}, toolCalls=${resToolCalls.length || 0}`);
+        return result;
+    } catch (e) {
+        console.error(`[LLM Override] Erro na chamada originalInvoke:`, e);
+        throw e;
+    }
+};
 
 // Ferramenta de busca na Web (Google Custom Search ou Busca DuckDuckGo Gratuita)
 const searchWeb = tool(async ({ query }) => {
@@ -105,13 +198,14 @@ const fetchUrl = tool(async ({ url }) => {
 // Inicialização do modelo LLM (OpenAI, OpenRouter ou DeepSeek)
 export function getLLM() {
     const provider = process.env.LLM_PROVIDER || "openai";
+    let llm;
 
     if (provider === "openrouter") {
         const apiKey = process.env.OPENROUTER_API_KEY;
         const apiBase = "https://openrouter.ai/api/v1";
         const modelName = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash";
         console.log(`[LLM] Inicializando OpenRouter como motor de LLM (Modelo: ${modelName})`);
-        return new ChatOpenAI({
+        llm = new ChatOpenAI({
             apiKey: apiKey,
             openAIApiKey: apiKey,
             configuration: {
@@ -125,13 +219,11 @@ export function getLLM() {
             modelName: modelName,
             temperature: 0.1
         });
-    }
-
-    if (provider === "deepseek") {
+    } else if (provider === "deepseek") {
         const apiKey = process.env.DEEPSEEK_API_KEY;
         const apiBase = process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com";
         console.log(`[LLM] Inicializando DeepSeek como motor de LLM (Base: ${apiBase})`);
-        return new ChatOpenAI({
+        llm = new ChatOpenAI({
             apiKey: apiKey,
             openAIApiKey: apiKey,
             configuration: {
@@ -141,15 +233,17 @@ export function getLLM() {
             modelName: "deepseek-chat",
             temperature: 0.1
         });
+    } else {
+        console.log("[LLM] Inicializando OpenAI GPT como motor de LLM");
+        llm = new ChatOpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+            openAIApiKey: process.env.OPENAI_API_KEY,
+            modelName: "gpt-4o-mini", // gpt-4o-mini por padrão para velocidade e custo reduzidos
+            temperature: 0.1
+        });
     }
 
-    console.log("[LLM] Inicializando OpenAI GPT como motor de LLM");
-    return new ChatOpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        openAIApiKey: process.env.OPENAI_API_KEY,
-        modelName: "gpt-4o-mini", // gpt-4o-mini por padrão para velocidade e custo reduzidos
-        temperature: 0.1
-    });
+    return llm;
 }
 
 // Criação do Agente com as regras de Tom de Voz e links

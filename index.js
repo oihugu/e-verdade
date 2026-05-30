@@ -51,11 +51,8 @@ function saveUserMemory(senderNumber, record) {
 	const filePath = path.join(MEMORY_DIR, `${senderNumber}.json`);
 	const history = readUserMemory(senderNumber);
 
-	// Limita o histórico guardado aos últimos 30 itens para evitar estourar o contexto do LLM
+	// Adiciona o novo registro ao histórico completo salvo em disco
 	history.push(record);
-	if (history.length > 30) {
-		history.shift();
-	}
 
 	try {
 		fs.writeFileSync(filePath, JSON.stringify(history, null, 2), 'utf-8');
@@ -230,11 +227,13 @@ client.on('message', async (msg) => {
 	console.log(`[Orquestrador] Iniciando checagem. Thread ID: ${threadId}`);
 	try {
 		// Carrega o histórico enviado anteriormente para injetar no contexto
-		const pastVerifications = readUserMemory(senderNumber);
+		const fullHistory = readUserMemory(senderNumber);
 		let pastContext = "";
-		if (pastVerifications.length > 0) {
+		if (fullHistory.length > 0) {
+			// Mantém o histórico completo em disco, mas envia apenas as últimas 15 checagens no prompt para evitar estourar o limite de tokens do LLM
+			const recentVerifications = fullHistory.slice(-15);
 			pastContext = "Histórico de checagens já enviadas para este mesmo número de telefone:\n" +
-				pastVerifications.map(v =>
+				recentVerifications.map(v =>
 					`- Pergunta/Notícia: "${v.query}"\n  Resposta já enviada anteriormente: "${v.summary}"`
 				).join("\n") + "\n\nATENÇÃO: Use esse histórico apenas para saber o que já foi respondido a este usuário, evitando repetir informações idênticas ou contradizer respostas anteriores. Se a pergunta atual for nova, ignore o histórico e realize a checagem normalmente.\n\n";
 		}
