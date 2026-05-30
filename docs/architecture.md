@@ -38,11 +38,13 @@ graph TD
 ## 2. Componentes e Subistemas
 
 ### A. Camada de Integração (Zap Bridge)
+*	**Ferramenta:** WWWebJS Whatsapp Bridge
 *   **Papel:** Ponte entre o ecossistema do WhatsApp e os serviços internos do projeto.
 *   **Tecnologia:** Serviço Node.js/TypeScript ou Python rodando um servidor Express/FastAPI que recebe payloads HTTP POST contendo as interações do WhatsApp.
 *   **Funções:** Normalização de formatos de mídia e controle de concorrência de mensagens recebidas.
 
 ### B. Orquestrador LLM (O Cérebro)
+*	**Ferramenta:** OpenAI
 *   **Papel:** Agente inteligente encarregado de tomar as decisões de roteamento, higienizar o contexto da sessão e produzir a resposta adaptada a cada persona.
 *   **Funções:**
     *   **Higienização do Contexto:** Limpa e reseta o histórico/contexto da sessão do agente a cada execução para garantir que checagens ou interações anteriores não enviesem a tomada de decisão da tarefa atual.
@@ -51,10 +53,12 @@ graph TD
     *   **Adequação de Tom:** Formata o texto final para ser amigável e direto.
 
 ### C. Módulo de Busca e Verificação (True Checker)
+*	**Ferramenta:** Tool OpenAI
 *   **Papel:** Pesquisa e ranqueamento de links confiáveis.
 *   **Funções:** Executa buscas na web (ex: via Google Search API ou Tavily API), limita as buscas aos sites definidos e valida os timestamps de publicação das fontes para evitar boatos baseados em notícias antigas recicladas.
 
 ### D. Camada de Acessibilidade (Text-to-Speech)
+*	**Ferramenta:** Elevenlabs TTS
 *   **Papel:** Geração de respostas faladas para acessibilidade.
 *   **Funções:** Sintetiza o roteiro gerado pelo LLM em áudio de alta qualidade e envia o arquivo formatado em `.ogg` (codec OPUS) para a API do WhatsApp.
 
