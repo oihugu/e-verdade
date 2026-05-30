@@ -87,7 +87,7 @@ const fetchUrl = tool(async ({ url }) => {
             .replace(/<[^>]*>/g, " ")
             .replace(/\s+/g, " ")
             .trim();
-        
+
         // Retorna os primeiros 4000 caracteres para não estourar o limite de tokens do LLM
         return cleanText.substring(0, 4000);
     } catch (error) {
@@ -176,6 +176,31 @@ Você DEVE usar a ferramenta 'web_search' sempre que houver qualquer dúvida fac
     return createDeepAgent({
         model: llm,
         tools: [searchWeb, fetchUrl],
+        systemPrompt: systemPrompt
+    });
+}
+
+export function createAudioFixerAgent() {
+    const llm = getLLM();
+
+    const systemPrompt = `Você é o assistente de pós-processamento de texto para TTS (Text-to-Speech) do e-verdade.
+Seu objetivo é transformar qualquer mensagem em um roteiro natural, confortável e claro para ser ouvido em voz alta.
+
+Regras obrigatórias para saída em áudio:
+1. Remova URLs, links, hashtags, @usuários, markdown, emojis excessivos e símbolos estranhos.
+2. Expanda abreviações e siglas quando possível para melhorar a compreensão na fala.
+3. Ajuste pontuação para pausas naturais (vírgulas e pontos curtos), evitando frases longas.
+4. Preserve o sentido original do conteúdo, sem inventar informações.
+5. Mantenha tom humano, fluido e fácil de entender.
+6. Se houver lista, converta para enumeração falável e simples.
+7. Nunca inclua bloco de links. Nunca use [LINKS_START] ou [LINKS_END].
+8. Retorne apenas o texto final pronto para narração.
+
+Objetivo final: gerar uma versão que soe natural quando lida por voz sintética, com máxima clareza e conforto auditivo.`;
+
+    return createDeepAgent({
+        model: llm,
+        tools: [],
         systemPrompt: systemPrompt
     });
 }
