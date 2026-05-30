@@ -20,12 +20,12 @@ graph TD
 
     subgraph "Cérebro (Orquestrador)"
         C <-->|Mensagens Ingestão| D[Orquestrador LLM]
-        D -->|Transcrição se Áudio| E[Speech-to-Text]
-        D -->|Síntese se Maria| F[Text-to-Speech]
+        D -->|Transcrição se Áudio| E[Speech-to-Text (Elevenlabs Whisper)]
+        D -->|Síntese se Maria| F[Text-to-Speech (Elevenlabs)]
     end
 
     subgraph "Verificação de Dados"
-        D <-->|Refinamento & Busca| G[Mecanismo de Busca na Web]
+        D <-->|Refinamento & Busca| G[Mecanismo de Busca na Web (Tool forçada toda execução)]
         G <-->|Filtro de Domínios Confiáveis| H((Bases de Fact-Checking))
     end
 
