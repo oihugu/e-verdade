@@ -51,9 +51,9 @@ function saveUserMemory(senderNumber, record) {
 	const filePath = path.join(MEMORY_DIR, `${senderNumber}.json`);
 	const history = readUserMemory(senderNumber);
 
-	// Limita o histórico guardado aos últimos 10 itens para evitar estourar o contexto do LLM
+	// Limita o histórico guardado aos últimos 30 itens para evitar estourar o contexto do LLM
 	history.push(record);
-	if (history.length > 10) {
+	if (history.length > 30) {
 		history.shift();
 	}
 
