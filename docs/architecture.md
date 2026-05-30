@@ -43,9 +43,9 @@ graph TD
 *   **Funções:** Normalização de formatos de mídia e controle de concorrência de mensagens recebidas.
 
 ### B. Orquestrador LLM (O Cérebro)
-*   **Papel:** Agente inteligente encarregado de tomar as decisões de roteamento, higienizar a entrada do usuário e produzir a resposta adaptada a cada persona.
+*   **Papel:** Agente inteligente encarregado de tomar as decisões de roteamento, higienizar o contexto da sessão e produzir a resposta adaptada a cada persona.
 *   **Funções:**
-    *   **Higienização:** Limpa o texto da mensagem.
+    *   **Higienização do Contexto:** Limpa e reseta o histórico/contexto da sessão do agente a cada execução para garantir que checagens ou interações anteriores não enviesem a tomada de decisão da tarefa atual.
     *   **Classificação de Viés:** Analisa a tonalidade partidária ou ideológica da notícia.
     *   **Formulação de Busca:** Converte o boato em uma consulta lógica e neutra de pesquisa.
     *   **Adequação de Tom:** Formata o texto final para ser amigável e direto.

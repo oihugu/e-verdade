@@ -8,7 +8,7 @@ Este documento especifica a arquitetura e as fases de processamento do pipeline 
 
 ```mermaid
 graph TD
-    A[Mensagem do WhatsApp] --> B[Fase 1: Higienização & Extração]
+    A[Mensagem do WhatsApp] --> B[Fase 1: Higienização do Contexto & Extração]
     B --> C[Fase 2: Classificação & Filtro]
     C -->|Ignorar| D[Resposta Padrão: Conversação]
     C -->|Checar| E[Fase 3: Formulação de Busca]
@@ -22,12 +22,11 @@ graph TD
 
 ## Detalhamento das Fases
 
-### Fase 1: Higienização (Sanitização) e Extração
-*   **Objetivo:** Limpar o texto de entrada para isolar a alegação/notícia.
+### Fase 1: Higienização do Contexto (Context Sanitization) e Extração
+*   **Objetivo:** Limpar e resetar o histórico de contexto/memória da sessão do agente a cada execução para garantir que interações anteriores não enviesem a checagem atual. Adicionalmente, isolar o núcleo da mensagem.
 *   **Ações:**
-    *   Remover caracteres especiais excessivos, emojis repetidos e marcadores comuns de correntes (ex: *"ATENÇÃO!!! READ DIRETO DO GRUPO"*, *"REPASSEM!!"*, *"URGENTE"*).
-    *   Extrair o núcleo semântico da mensagem (a afirmação principal).
-    *   Identificar links anexados para envio direto ao módulo de busca.
+    *   **Higienização do Contexto:** Esvaziar buffers de memória ou contextos acumulados de sessões passadas. Cada nova verificação factual deve começar de um estado "limpo" (clean state), prevenindo a contaminação factual ou ideológica entre diferentes usuários ou execuções.
+    *   **Limpeza e Extração:** Remover emojis repetidos, formatações excessivas e marcadores de correntes de encaminhamento (ex: *"URGENTE"*, *"REPASSEM DIRETO DO GRUPO"*), isolando o texto/alegação central.
 
 ### Fase 2: Classificação e Filtro
 *   **Objetivo:** Identificar se a mensagem contém uma alegação factual verificável.
