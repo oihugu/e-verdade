@@ -238,6 +238,11 @@ client.on('message', async (msg) => {
 					`- Pergunta/Notícia: "${v.query}"\n  Resposta já enviada anteriormente: "${v.summary}"`
 				).join("\n") + "\n\nATENÇÃO: Use esse histórico apenas para saber o que já foi respondido a este usuário, evitando repetir informações idênticas ou contradizer respostas anteriores. Se a pergunta atual for nova, ignore o histórico e realize a checagem normalmente.\n\n";
 		}
+		const day_and_date = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+		userText = `[${day_and_date}] [is_audio: ${isAudio}] ${userText}`;
+
+		// Executa a checagem de fatos com o agente, passando o histórico para o contexto
+		// O agente irá decidir se precisa ou não fazer buscas na web e usar as ferramentas disponíveis
 
 		const fullPrompt = `${pastContext}Pergunta/Notícia atual do usuário: "${userText}"`;
 
@@ -264,7 +269,7 @@ client.on('message', async (msg) => {
 		console.log(`========================================\n`);
 
 		const finalMessage = resultState.messages[resultState.messages.length - 1].content;
-		console.log(`[Orquestrador] Resposta final gerada.`);
+		console.log(`[Orquestrador] Resposta final gerada. - Conteúdo: "${finalMessage}"`);
 
 		// Salva a checagem atual no histórico deste usuário
 		const newRecord = {
@@ -291,7 +296,6 @@ client.on('message', async (msg) => {
 			// Remove possíveis marcadores adicionais para ficar limpo para leitura falada
 			let audioScript = replyText.replace(/[\*\_\[\]]/g, '').trim();
 
-			audioScript = await improve_for_tts(audioScript);
 			console.log(`[TTS] Enviando roteiro de voz: "${audioScript}"`);
 
 			const audioFile = await textToSpeech(audioScript);
