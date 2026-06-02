@@ -12,7 +12,7 @@ dotenv.config();
 console.log('Inicializando e-verdade Bot com Deep Agents...');
 
 // Whitelist para responder apenas a números autorizados (ex: o do usuário de teste)
-const whitelist = ['5511972747114', '551172747114', '195206381084836', '195206381084836@lid'];
+const whitelist = [];
 
 // Pasta para guardar o histórico de checagens dos usuários
 const MEMORY_DIR = path.resolve('./memory');
